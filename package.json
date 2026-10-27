@@ -1,0 +1,27 @@
+{
+  "name": "scenquira",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.14.0"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,web \"npm run dev -w @scenquira/server\" \"npm run dev -w @scenquira/web\"",
+    "build": "npm run build -w @scenquira/server && npm run build -w @scenquira/web",
+    "typecheck": "tsc --noEmit -p apps/server/tsconfig.json && tsc --noEmit -p apps/web/tsconfig.json",
+    "test": "vitest run",
+    "start": "concurrently -k -n server,web \"npm start -w @scenquira/server\" \"npm start -w @scenquira/web\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "concurrently": "^9.0.0",
+    "node": "^22.23.4",
+    "typescript": "^5.9.0",
+    "vitest": "5.0.5"
+  },
+  "overrides": { "multer": "^2.5.0" }
+}

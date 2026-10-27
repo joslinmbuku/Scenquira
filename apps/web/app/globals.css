@@ -1,0 +1,24 @@
+@import "tailwindcss";
+@source "../../../packages/shared/src";
+
+@theme {
+  --color-room: #101016;
+  --color-panel: #191920;
+  --color-edge: #34343f;
+  --color-muted: #b2b0c2;
+  --color-accent: #bc9aff;
+}
+@layer base {
+  body { @apply m-0 bg-room text-zinc-100 antialiased; font-family: Arial, Helvetica, sans-serif; }
+  button, select, input { @apply focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent; }
+  button { @apply cursor-pointer disabled:cursor-not-allowed disabled:opacity-40; }
+  select, input[type='number'] { @apply w-full rounded-lg border border-edge bg-room px-3 py-2 text-sm; }
+  input[type='checkbox'], input[type='range'] { accent-color: #bc9aff; }
+}
+@layer components {
+  .panel { @apply rounded-2xl border border-edge bg-panel p-6; }
+  .btn { @apply rounded-lg border border-edge bg-white/5 px-4 py-2.5 text-sm font-semibold transition hover:bg-white/10; }
+  .primary { @apply border-violet-400 bg-violet-400 text-zinc-950 hover:bg-violet-300; }
+  .label { @apply mb-2 block text-xs font-semibold uppercase tracking-widest text-muted; }
+  .pill { @apply inline-flex items-center gap-2 rounded-full border border-edge px-3 py-1 text-xs font-semibold; }
+}
