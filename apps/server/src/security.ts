@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
 import { en } from '../../../packages/shared/src/messages/en';
-export const WEB_ORIGIN = 'http://localhost:3000';
+// Set in the launch environment when the default web port is already occupied.
+export const WEB_ORIGIN = process.env.SCENQUIRA_WEB_ORIGIN || 'http://localhost:3000';
 const sessions = new Map<string, { csrf: string; expires: number }>();
 export function sessionId(req: Request) { return /(?:^|;\s*)scenquira=([a-f0-9]{64})(?:;|$)/.exec(req.headers.cookie ?? '')?.[1] ?? ''; }
 export function session(req: Request) { const s = sessions.get(sessionId(req)); return s && s.expires > Date.now() ? s : undefined; }

@@ -1,4 +1,6 @@
 export const en = {
+  approvalHelp: 'Suggest mode: click Start Suspense, then Approve here within 15 seconds.',
+  expiresIn: 'Expires in',
   app: 'Scenquira', promise: 'Production that follows your community’s moments while keeping you in control.',
   nav: ['Live Director', 'Connections', 'Simulator', 'History'],
   modes: ['Observe', 'Suggest', 'Auto'], contexts: ['Normal', 'Explanation', 'Suspense'],

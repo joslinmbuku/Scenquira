@@ -75,7 +75,9 @@ export class ObsAdapter implements ProductionAdapter {
       const after = { ...before, scaleX: Number(before.scaleX) * factor, scaleY: Number(before.scaleY) * factor };
       s.camera = { scene: m.cameraScene, item: m.cameraId, before, after, owned: true };
       this.expect(`camera:${m.cameraScene}:${m.cameraId}`, after);
-      await this.client.call('SetSceneItemTransform', { sceneName: m.cameraScene, sceneItemId: m.cameraId, sceneItemTransform: after });
+      // Only write the changed scales. OBS may return zero unused bounds sizes
+      // for free-scale sources but rejects those values in transform writes.
+      await this.client.call('SetSceneItemTransform', { sceneName: m.cameraScene, sceneItemId: m.cameraId, sceneItemTransform: { scaleX: after.scaleX, scaleY: after.scaleY } });
     }
   }
   async restore(id: string) {
@@ -86,7 +88,7 @@ export class ObsAdapter implements ProductionAdapter {
       const current = clean((await this.client.call('GetSceneItemTransform', { sceneName: c.scene, sceneItemId: c.item })).sceneItemTransform);
       if (this.snapshot === s && c.owned && same(current, c.after)) {
         this.expect(`camera:${c.scene}:${c.item}`, c.before);
-        await this.client.call('SetSceneItemTransform', { sceneName: c.scene, sceneItemId: c.item, sceneItemTransform: c.before });
+        await this.client.call('SetSceneItemTransform', { sceneName: c.scene, sceneItemId: c.item, sceneItemTransform: { scaleX: c.before.scaleX, scaleY: c.before.scaleY } });
       }
     }
     if (s.scene?.owned) {

@@ -109,8 +109,8 @@ export class Director {
     if (!p.explicit) this.starts.push(this.time.now());
     if (p.kind === 'Hype') this.lastHype = this.time.now();
     this.log('Started', p.reason, p.kind, { decisionMs: this.time.now() - received });
-    exec.ready = this.adapter.begin(exec.id, p.kind, this.state.intensity, () => !exec.cancelled);
     try {
+      exec.ready = this.adapter.begin(exec.id, p.kind, this.state.intensity, () => !exec.cancelled);
       await exec.ready;
       if (exec.cancelled) return;
       this.log('Info', en.acknowledged, p.kind, { acknowledgementMs: this.time.now() - exec.started });

@@ -1,10 +1,10 @@
 # Local API
 
-Base URL: `http://localhost:4000`, IPv4 loopback only. The browser frontend origin is `http://localhost:3000`. JSON command bodies are validated using Zod; invalid bodies return 400, missing session/origin/CSRF returns 403. Responses use no-store caching. There is no remote control or permissive CORS mode.
+Base URL: `http://localhost:4000`, IPv4 loopback only. The default browser origin is `http://localhost:3000`; set `SCENQUIRA_WEB_ORIGIN=http://localhost:3100` in the backend launch environment for the documented demo configuration. JSON command bodies are validated using Zod; invalid bodies return 400, missing session/origin/CSRF returns 403. Responses use no-store caching. There is no remote control or permissive CORS mode.
 
 ## Session
 
-`POST /session` requires the exact frontend Origin. It sets an HttpOnly, SameSite=Lax cookie and returns `{ csrf }`. Keep this value only in memory and send it as `X-Scenquira-CSRF` on commands, with credentials. Sessions expire after 12 hours. Reload to establish a new session after expiration.
+`POST /session` requires the exact frontend Origin. It sets an HttpOnly, SameSite=Lax cookie and returns `{ csrf }`. Keep this value only in memory and send it as `X-Scenquira-CSRF` on commands, with credentials. Sessions expire after 12 hours. The UI renews a rejected read session once, updates its CSRF token, and retries the read. Mutating commands are never automatically replayed. Backend restarts clear sessions, tokens and mappings.
 
 ## Read endpoints (session required)
 

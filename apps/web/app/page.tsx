@@ -1,5 +1,7 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { readWithSessionRecovery } from './session';
+import { ApprovalModal } from './approval-modal';
 import type { DirectorState, Mapping, Overlay, Sequence } from '../../../packages/shared/src';
 import { en } from '../../../packages/shared/src/messages/en';
 
@@ -11,8 +13,10 @@ export default function Home() {
   const [state, setState] = useState<State>();
   const [tab, setTab] = useState<string>(en.nav[0]);
   const [csrf, setCsrf] = useState('');
+  const sessionRequest = useRef<Promise<void> | undefined>(undefined);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [approvalTarget, setApprovalTarget] = useState<'REAL' | 'SIMULATION'>();
   const [scenes, setScenes] = useState<{ name: string; uuid: string }[]>([]);
   const [items, setItems] = useState<{ id: number; name: string }[]>([]);
   const [mapping, setMapping] = useState<Mapping>({ main: '', welcome: '', cameraScene: '', cameraId: -1, zoom: 1.1 });
@@ -20,18 +24,34 @@ export default function Home() {
   const simulated = tab === en.nav[2];
   const target = simulated ? 'SIMULATION' : 'REAL';
   const d = simulated ? state?.simulation : state?.real;
-  const read = useCallback(async (path: string) => { const r = await fetch(`${API}/${path}`, { credentials: 'include', cache: 'no-store' }); if (!r.ok) throw new Error(en.error); return r.json(); }, []);
-  const refresh = useCallback(async () => { setState(await read('state') as State); }, [read]);
+  const approvalDirector = approvalTarget === 'REAL' ? state?.real : approvalTarget === 'SIMULATION' ? state?.simulation : undefined;
+  const approval = approvalDirector?.mode === 'Suggest' ? approvalDirector.proposals.find(p => p.kind === 'Suspense') : undefined;
+  const renewSession = useCallback(() => {
+    if (!sessionRequest.current) {
+      sessionRequest.current = (async () => {
+        const r = await fetch(`${API}/session`, { method: 'POST', credentials: 'include' });
+        if (!r.ok) throw new Error(en.offline);
+        const session = await r.json() as { csrf: string };
+        setCsrf(session.csrf);
+      })().finally(() => { sessionRequest.current = undefined; });
+    }
+    return sessionRequest.current;
+  }, []);
+  const read = useCallback((path: string) => readWithSessionRecovery(`${API}/${path}`, renewSession), [renewSession]);
+  const refresh = useCallback(async () => {
+    setState(await read('state') as State);
+    setError(current => current === en.offline ? '' : current);
+  }, [read]);
   useEffect(() => {
     let alive = true;
     const start = async () => {
-      try { const r = await fetch(`${API}/session`, { method: 'POST', credentials: 'include' }); if (!r.ok) throw new Error(); const s = await r.json() as { csrf: string }; if (alive) { setCsrf(s.csrf); await refresh(); setError(new URLSearchParams(window.location.search).get('twitch') === 'error' ? en.authError : ''); } }
+      try { await renewSession(); if (alive) { await refresh(); setError(new URLSearchParams(window.location.search).get('twitch') === 'error' ? en.authError : ''); } }
       catch { if (alive) setError(en.offline); }
     };
     void start();
     const id = setInterval(() => { if (alive) void refresh().catch(() => setError(en.offline)); }, 1000);
     return () => { alive = false; clearInterval(id); };
-  }, [refresh]);
+  }, [refresh, renewSession]);
   async function send(body: object) {
     setBusy(true); setError('');
     try { const r = await fetch(`${API}/command`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'X-Scenquira-CSRF': csrf }, body: JSON.stringify(body) }); const data = await r.json() as { error?: string; url?: string }; if (!r.ok) throw new Error(data.error || en.error); if (data.url) window.location.assign(data.url); await refresh(); return true; }
@@ -39,11 +59,19 @@ export default function Home() {
     finally { setBusy(false); }
   }
   const configure = (value: object) => send({ action: 'configure', target, value });
-  const action = (name: string) => send({ action: name, target });
+  const action = async (name: string) => {
+    const sent = await send({ action: name, target });
+    if (sent && name === 'suspense') setApprovalTarget(target);
+    return sent;
+  };
+  async function decideApproval(action: 'approve' | 'dismiss') {
+    if (approval && await send({ action, target: approvalTarget, id: approval.id })) setApprovalTarget(undefined);
+  }
   async function loadScenes() { try { setScenes(await read('scenes')); } catch { setError(en.obsError); } }
   async function cameraScene(name: string) { setMapping(m => ({ ...m, cameraScene: name, cameraId: -1 })); try { setItems(await read(`items?scene=${encodeURIComponent(name)}`)); } catch { setError(en.invalidMapping); } }
   const status = (name: string, value: string) => <span className="pill"><span className={value === en.connected ? 'text-emerald-300' : 'text-muted'} aria-hidden="true">●</span>{name}<span className="text-muted">{value}</span></span>;
   return <div className="min-h-screen">
+    {approval && <ApprovalModal key={approval.id} proposal={approval} now={approvalTarget === 'SIMULATION' ? state!.simNow : Date.now()} busy={busy} error={error} onApprove={() => void decideApproval('approve')} onDismiss={() => void decideApproval('dismiss')} />}
     <header className="flex flex-wrap items-center justify-between gap-4 border-b border-edge px-6 py-5 lg:px-10">
       <a href="/" className="flex items-center gap-3 text-xl font-bold tracking-tight"><span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent text-zinc-950">S</span>{en.app}<span className="ml-2 text-xs font-normal uppercase tracking-[.25em] text-muted">{en.director}</span></a>
       <div className="flex flex-wrap gap-3">{status(en.twitch, state?.twitch.status ?? en.disconnected)}{status(en.obs, state?.obs.status ?? en.disconnected)}</div>

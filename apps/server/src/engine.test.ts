@@ -10,6 +10,30 @@ function setup() { const adapter = new SimulatedObs(); const d = new Director('S
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-26T12:00:00Z')); });
 afterEach(() => vi.useRealTimers());
 describe('Production engine safety', () => {
+  it.each(['throw', 'reject'] as const)('clears ownership when an adapter fails with %s', async failure => {
+    const { d, adapter } = setup();
+    adapter.begin = () => {
+      if (failure === 'throw') throw new Error('Adapter unavailable');
+      return Promise.reject(new Error('Adapter unavailable'));
+    };
+    await expect(d.suspense()).resolves.toBeUndefined();
+    expect(d.state.mode).toBe('Observe');
+    expect(d.state.active).toBeUndefined();
+    expect(d.overlay).toBeUndefined();
+    expect(d.state.history.some(entry => entry.status === 'Error')).toBe(true);
+  });
+  it('clears the overlay and stops automatic operation when restoration fails', async () => {
+    const { d, adapter } = setup();
+    await d.suspense();
+    adapter.restore = async () => { throw new Error('OBS unavailable'); };
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(d.state.mode).toBe('Observe');
+    expect(d.state.active).toBeUndefined();
+    expect(d.overlay).toBeUndefined();
+    await d.ingest(raid());
+    expect(adapter.calls).toHaveLength(1);
+    expect(d.state.history.some(entry => entry.status === 'Error')).toBe(true);
+  });
   it('deduplicates a notification to one action', async () => { const { d, adapter } = setup(); const e = raid(); await d.ingest(e); await d.ingest(e); expect(adapter.calls).toHaveLength(1); expect(d.state.history[0].reason).toBe(en.blocked.duplicate); });
   it('does not mistake one person repeating for collective activity', async () => { const { d, adapter } = setup(); await vi.advanceTimersByTimeAsync(70_000); await burst(d, true); expect(adapter.calls).toHaveLength(0); expect(d.snapshot().activity.messages).toBe(3); });
   it('requires warm-up and handles a zero baseline with a finite floor', async () => { const { d, adapter } = setup(); await burst(d); expect(adapter.calls).toHaveLength(0); await vi.advanceTimersByTimeAsync(70_001); await burst(d); expect(adapter.calls).toEqual(['Hype']); expect(d.snapshot().activity.ratio).toBe(10); });

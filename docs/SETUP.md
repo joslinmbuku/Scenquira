@@ -1,69 +1,153 @@
 # Install and connect Scenquira
 
-Use a local Windows, macOS, or Linux computer running OBS Studio. The service binds to IPv4 loopback; do not expose either port publicly. Open the application as `http://localhost:3000` (the origin is intentional).
+Follow this guide once, then use [Testing and real use](TESTING.md). Instructions below target the verified Windows setup. Keep the interface in English; French OBS menu equivalents are included where useful.
 
-## Install
+## 1. Install and launch
 
-Use Node 22 LTS or newer and npm. From the repository root:
+Install Node.js 22 LTS or newer and npm. Download or clone this repository and open PowerShell in its root folder.
 
-```powershell
+~~~powershell
+node --version
 npm ci
-Copy-Item .env.example .env
-npm run dev
-```
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+~~~
 
-The web interface is at http://localhost:3000. The NestJS service uses http://localhost:4000. For production builds, run `npm run build`, then `npm start`. Both processes must remain running during a sequence. Check with `npm run typecheck` and `npm test`.
+Never overwrite an existing .env just to restart. Complete both credential sections below before launching where possible; environment changes require a backend restart.
 
-## Twitch
+**Terminal 1:**
 
-1. Register a confidential application in the Twitch developer console. Enable two-factor authentication on the registering account if requested by Twitch.
-2. Register the exact OAuth callback `http://localhost:4000/auth/twitch/callback`.
-3. Put the client ID and client secret in the root `.env`. Restart the local service after editing environment values.
-4. In Connections, choose **Authorize Twitch** and sign in as the broadcaster whose chat you want to receive. This MVP uses that same user ID for the chat reader and broadcaster.
-5. Send one real message to that channel. Connections should show Connected and a real chat receipt timestamp; History should contain “Real Twitch chat message received.” Keep Observe selected for this initial check.
+~~~powershell
+$env:SCENQUIRA_WEB_ORIGIN = 'http://localhost:3100'
+npm run dev -w @scenquira/server
+~~~
 
-The installed-chatbot user-token flow requests only `user:read:chat`. It does not send messages. `channel.chat.message` version 1 uses `broadcaster_user_id = user_id = validated token user`. Incoming `channel.raid` version 1 uses `to_broadcaster_user_id`; this event needs no additional scope. Paid subscriptions are not required. The client secret and access/refresh tokens stay server-side, in memory. Restarting requires authorization again. Disconnect attempts revocation and clears local tokens.
+**Terminal 2:**
 
-Tokens are validated at authorization and every 55 minutes; expired tokens are refreshed using the server-side authorization-code refresh token. Revocation and permission errors require reauthorization. WebSocket requested migrations transfer the existing subscriptions; transport loss creates a new session and subscriptions. Connection gaps are displayed as potentially missed events, never as recovered events.
+~~~powershell
+npm run dev -w @scenquira/web -- --webpack --port 3100
+~~~
 
-References checked during implementation (October 26, 2026):
+Open **http://localhost:3100** and keep both terminals open. This is the documented demo configuration. API and overlay: localhost:4000. OBS WebSocket: 127.0.0.1:4455. Use localhost in the browser for the session and OAuth flow.
 
-- [Installed chatbot authentication](https://dev.twitch.tv/docs/chat/authenticating/)
-- [EventSub subscription types](https://dev.twitch.tv/docs/eventsub/eventsub-subscription-types/)
-- [WebSocket lifecycle](https://dev.twitch.tv/docs/eventsub/handling-websocket-events/)
-- [Authorization code flow](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/)
-- [Token validation requirements](https://dev.twitch.tv/docs/authentication/validate-tokens/)
+Set SCENQUIRA_WEB_ORIGIN in the backend terminal, not only in .env: it is currently read before .env loading. The default single-command launch, npm run dev, uses port 3000 and requires that variable to be unset or match localhost:3000. Do not run both launch methods simultaneously.
 
-## OBS Studio
+The Windows Turbopack production build previously failed with EPERM in its CSS worker. The webpack development launch is verified; a complete production build and clean-install rehearsal remain pending. npm run build and npm start are available but are not the verified demo launch path.
 
-1. Use an installation supporting obs-websocket v5 (built into OBS Studio 28 and later). Open Tools → WebSocket Server Settings. Enable the server and authentication. Keep access local; never forward port 4455 on a router.
-2. Set `OBS_URL=ws://127.0.0.1:4455` and `OBS_PASSWORD` in `.env`; restart Scenquira. Passwords are never sent to the web UI.
-3. Use a test scene collection. Create or select Main and Welcome scenes yourself. Scenquira does not create, delete, or rename scenes and never starts or stops a broadcast.
-4. Connect OBS, read the available scenes, and map Main, Welcome, Camera scene, and Camera source. Sources nested in groups are not supported in this first implementation; select a direct scene item.
-5. For digital framing, set the camera item's bounding-box type to “No bounds” in OBS. Choose a suitable centered alignment/framing yourself. The configured zoom is bounded to 1.0–1.2 and scaled by Intensity. It is not face tracking. Hype and Suspense zoom only when the camera's mapped scene is the current scene; their overlay can still run elsewhere.
-6. Validate and save mappings. Mapping changes pause the director; return to Live Director and Resume when ready.
-7. Add `http://localhost:4000/overlay` as a browser source (1920 × 1080) in relevant test scenes. This URL is read-only and transparent when idle.
-8. Choose the explicit Welcome scene test. It temporarily uses Suggest, performs a five-second Raid Welcome, and returns only if the sequence retains control. DND still blocks it. Watch OBS directly and confirm both the switch and the return. Record actual results in `docs/VERIFICATION.md`.
+## 2. Register Twitch
 
-OBS reconnect is explicit through Connect OBS. Reconnection discards old snapshots, rereads current state, removes old mappings, pauses, and selects Observe. Revalidate mappings before enabling Auto again.
+1. Sign in at [Twitch Developer Console](https://dev.twitch.tv/console/apps).
+2. Choose Register Your Application (Enregistrer votre application).
+3. Enter a unique application name, choose an appropriate application-integration category, and choose Confidential if the form asks for client type.
+4. Register this exact OAuth redirect URL: **http://localhost:4000/auth/twitch/callback**. Keep port 4000 even though the interface uses 3100.
+5. Create the application, open Manage, copy Client ID, and generate a Client Secret.
+6. Save the values in the root .env. Do not use your Twitch username as the client ID.
 
-[obs-websocket-js](https://github.com/obs-websocket-community-projects/obs-websocket-js) and the [OBS protocol](https://github.com/obsproject/obs-websocket/blob/master/docs/generated/protocol.md) were consulted before implementation.
+~~~dotenv
+TWITCH_CLIENT_ID=your_application_client_id
+TWITCH_CLIENT_SECRET=your_application_client_secret
+TWITCH_REDIRECT_URI=http://localhost:4000/auth/twitch/callback
+~~~
+
+Restart the backend after edits. In Scenquira, open Connections > Authorize Twitch and authorize the broadcaster account whose chat you want to receive. Wait for Connected.
+
+To send a test message: open Twitch > profile picture > Channel > Chat, type a short message, and press Enter. Check the real receipt timestamp in Connections. This works while the channel is offline.
+
+The connector requests user:read:chat, with the authenticated user as both broadcaster and chat reader. Incoming channel.raid requires no additional scope. Tokens remain server-side and in memory. Restarting requires authorization again. Disconnect clears local tokens and attempts revocation.
+
+References: [registration](https://dev.twitch.tv/docs/authentication/register-app/), [chat authentication](https://dev.twitch.tv/docs/chat/authenticating/), [OAuth](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/), [EventSub lifecycle](https://dev.twitch.tv/docs/eventsub/handling-websocket-events/).
+
+## 3. Enable OBS WebSocket
+
+1. Install/open [OBS Studio](https://obsproject.com/download). The real checks used OBS 33.0.0 with obs-websocket 5.7.6 on Windows.
+2. Open Tools > WebSocket Server Settings. Enable the server, set port 4455, enable authentication, and click Apply/OK.
+3. Use Show Connect Info to copy the Server Password. Save it in .env, keeping it private.
+
+~~~dotenv
+OBS_URL=ws://127.0.0.1:4455
+OBS_PASSWORD=your_obs_websocket_password
+~~~
+
+Restart the backend after edits. In Connections, click Connect OBS. Keep the WebSocket local and never forward its port on your router. [OBS remote-control guide](https://obsproject.com/kb/remote-control-guide).
+
+## 4. Prepare two test scenes
+
+Use a test scene collection. Do not begin broadcasting yet.
+
+1. Keep or create a main scene. In the verified setup it is named Scene.
+2. Select it and add Sources > + > Video Capture Device. Select your camera and arrange its framing.
+3. Right-click the camera source > Transform > Edit Transform. Use No bounds for the bounding-box type. Digital zoom does not track a face or automatically center the crop.
+4. Add a second scene named Welcome.
+5. Select Welcome > Sources > + > Text (GDI+) on Windows. Create a source, enter Welcome!, and click OK. Drag/resize the text in the preview. If Sources is missing, enable Docks > Sources.
+
+These names are examples, not hardcoded requirements. The app maps existing scenes and direct camera items. Cameras nested in groups are not supported.
+
+## 5. Save scene mappings
+
+In Scenquira > Connections, click Read scenes and sources. For the example above:
+
+| Setting | Select |
+| --- | --- |
+| Main scene | Scene |
+| Welcome scene | Welcome |
+| Camera scene | Scene |
+| Camera source | Video Capture Device |
+| Digital zoom factor | 1.1 |
+
+Click Validate and save mappings. This pauses the director. The scene/source form may need Read scenes and sources again after a page reload; saved mapping state is held by the backend until it restarts.
+
+## 6. Add the overlay
+
+If Scenquira Overlay already exists in both scenes, do not add duplicates.
+
+1. In OBS, select the main scene > Sources > + > Browser.
+2. Name it Scenquira Overlay. Uncheck Local file if selected.
+3. URL: **http://localhost:4000/overlay**. Width: **1920**; height: **1080** for a 1920 x 1080 base canvas.
+4. Keep its background transparent. Disable page control permissions when that option is available; it needs only read access.
+5. Move it above the camera in Sources and keep its eye icon enabled.
+6. In Welcome, add a Browser source using Add Existing > Scenquira Overlay, above the text source.
+
+An idle overlay is transparent: an empty image is normal until a sequence runs. The overlay source was already installed in the developer's current Scene/Welcome collection; a new installation must add its own.
+
+## 7. First visible tests
+
+**Welcome:** select Scene in OBS, then click Switch to Welcome for 5 seconds, then return in Connections. Watch OBS, not Scenquira's state preview. Twitch is not required for this explicit connection test.
+
+**Suspense:** select Scene in OBS. In Live Director choose Suggest > Resume if paused > disable Do Not Disturb > Start Suspense. Approve in the modal within 15 seconds. Watch the countdown/zoom and restoration in OBS. The user confirmed this flow works.
+
+Continue with [the real-use walkthrough](TESTING.md) before enabling automatic effects.
 
 ## Safe operating controls
 
-- **Observe:** computes and logs without changing OBS or the on-stream overlay.
-- **Suggest:** waits for Approve; approval rechecks controls, readiness, freshness, and limits. Proposals expire after 15 seconds and do not form a backlog.
-- **Auto:** requires valid mappings and explicit authorization per sequence. Starts are limited to three automatic sequences per rolling minute; Hype has a 45-second cooldown.
-- **Pause:** cancels the active sequence, clears proposals, and restores still-owned properties. Resume allows future decisions; suppressed events are not replayed.
-- **Do Not Disturb:** blocks all sequences, including raids and explicitly requested Suspense; enabling it cancels the current effect.
-- **Restore My Scene:** cancels timers, restores still-owned scene/framing properties, clears proposals, and pauses. It does not overwrite a manual change or blindly switch to Main.
-- **Manual takeover:** external scene or affected camera changes cancel the sequence. A bounded expected-event list distinguishes application changes from other OBS events. Restoration checks current values before writing. A simultaneous external write in the final OBS request round trip remains a protocol-level race; validate behavior on your installation.
-- **Recovery after a crash/outage:** restoration cannot be guaranteed. Use OBS directly to restore your preferred scene and camera framing. After reconnecting and mapping, the explicit **Recover to mapped Main scene** control rereads state and switches only the scene to mapped Main; it cannot reconstruct lost camera transforms. It pauses the director.
+| Control | Behavior |
+| --- | --- |
+| Observe | Logs decisions; no overlay or OBS effects |
+| Suggest | Creates proposals; approval rechecks current conditions and expiry |
+| Auto | Requires valid mappings and explicit automatic-sequence permissions |
+| Pause | Cancels current effects and blocks new ones |
+| Do Not Disturb | Blocks all sequences, including explicitly requested Suspense |
+| Cancel sequence | Cancels the current effect and restores still-owned properties |
+| Restore My Scene | Cancels timers, restores owned properties, and pauses; does not blindly switch to Main |
+| Recover to mapped Main scene | Explicit recovery command that pauses and switches to validated Main; cannot recover lost camera snapshots |
 
-## Simulator
+External scene or camera changes cause the sequence to yield. A service crash or OBS outage can prevent restoration: use OBS directly to recover. Reconnect discards old snapshots, returns to Observe, pauses and removes mappings; read and validate them again. Suppressed or stale events are not replayed.
 
-Simulator is an isolated director and simulated OBS adapter; it cannot write to real OBS. Its modes and permissions are separate. Select Auto, authorize desired sequences, advance the warm-up by 70 seconds, then use Collective Hype, Incoming raid, or Start Suspense. Also exercise one-person repetition, duplicates, stale events, and manual takeover. Every simulated record carries SIMULATION. Warm-up advances the activity clock only when idle; sequence durations still use real timers.
+## Troubleshooting
 
-## Privacy and local trust
+| Symptom | What to check |
+| --- | --- |
+| Another application appears | Use localhost:3100 with the matching backend launch environment |
+| Service unavailable | Keep both terminals running; refresh the exact localhost URL. The UI now renews expired read sessions after restarts |
+| Twitch authorization failed | Check callback spelling and client credentials; restart after .env edits. Backend must reach Twitch over HTTPS/WebSocket; a sandbox network denial can also cause failure |
+| OBS connection refused | OBS must be running with WebSocket enabled on port 4455; click Apply |
+| OBS authentication failed | Copy Server Password from Show Connect Info, save .env, restart backend |
+| Start Suspense does nothing | Check Recent decision: Resume, choose Suggest, disable DND, then Approve in the modal |
+| No modal | Only a valid Suspense proposal in Suggest opens it; Observe/Pause/DND block it, and proposals expire after 15 seconds |
+| No visible scene change | Start on Main, not Welcome. Watch OBS; in Studio Mode inspect Program output |
+| Countdown invisible | Confirm overlay URL/dimensions, enabled eye icon, top layer and current scene; idle overlay is transparent |
+| Camera does not zoom | Use mapped camera scene, direct item, No bounds, zoom above 1 and Intensity above 0 |
+| Hype does not trigger | Check warm-up, participants, message/reaction count, baseline, context, permissions, cooldown and budget in TESTING.md |
+| Connections lost after restart | Expected: reauthorize Twitch, reconnect OBS and validate mappings; browser session recovery does not restore tokens |
 
-Only capped participant/time/reaction data is retained in a 70-second activity window. Raw chat text is discarded after classification. No persistent chat log, token export, or browser localStorage is used. Audit history is bounded to 300 records per director in memory. Settings and mappings are session-only; reconfigure after restarting. The browser has an HttpOnly local session cookie and an in-memory CSRF token; mutating commands validate the exact application origin. Other local processes and browser extensions are within the host trust boundary. The read-only overlay exposes only the currently displayed effect and raid display data.
+## Privacy
+
+The application binds to loopback. Commands require the exact configured origin, a local session and CSRF token. The public overlay cannot command OBS. Credentials must never be committed or shown in demo footage. Raw chat is classified transiently; audit history holds bounded decisions, not message text. Configuration, tokens and history remain in memory.
